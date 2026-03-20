@@ -312,7 +312,7 @@ class CameraService : LifecycleService() {
         }
         isCameraReady = false
         startCamera()
-        showToast("Switched Camera")
+        showToast("Switched Camera to ${if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "BACK" else "FRONT"}")
     }
 
     private fun stopAll() {
@@ -452,7 +452,8 @@ class CameraService : LifecycleService() {
                 true
             }
 
-            add("🔄 Switch Camera").setOnMenuItemClickListener {
+            val currentCam = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "B" else "F"
+            add("🔄 Switch Camera ($currentCam)").setOnMenuItemClickListener {
                 switchCamera()
                 true
             }
