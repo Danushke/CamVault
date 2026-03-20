@@ -13,7 +13,9 @@ import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.util.Log
@@ -72,6 +74,9 @@ class CameraService : LifecycleService() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var floatingView: Button
+    private val handler = Handler(Looper.getMainLooper()) // Add this line
+
+    private val fadeRunnable = Runnable { fadeOut() }
 
     private var isCameraReady = false
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -98,6 +103,7 @@ class CameraService : LifecycleService() {
 
         if (hasOverlayPermission()) {
             createFloatingButton()
+            handler.postDelayed(fadeRunnable, 2500)
         }
 
         ensureFolderExists()
@@ -270,7 +276,14 @@ class CameraService : LifecycleService() {
         val fileName = "IMG_$timestamp.jpg"
         val photoFile = File(getCustomDirectory(), fileName)
 
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        val metadata = ImageCapture.Metadata().apply {
+            // Mirror the image if using the front camera to match the preview
+            isReversedHorizontal = currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+        }
+
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile)
+            .setMetadata(metadata)
+            .build()
 
         imageCapture.takePicture(
             outputOptions,
@@ -372,6 +385,11 @@ class CameraService : LifecycleService() {
                 showFloatingMenu(floatingView)
                 return true
             }
+
+            override fun onLongPress(e: MotionEvent) {
+                resetFadeAndTimer()
+                super.onLongPress(e)
+            }
         })
 
         val button = object : androidx.appcompat.widget.AppCompatButton(contextWrapper) {
@@ -382,7 +400,7 @@ class CameraService : LifecycleService() {
         }.apply {
             val shape = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#AA000000"))
+                setColor(Color.parseColor("#88000000"))
             }
             background = shape
             setTextColor(Color.WHITE)
@@ -453,7 +471,12 @@ class CameraService : LifecycleService() {
         windowManager.addView(floatingView, params)
     }
 
+    private fun fadeOut() {
+        floatingView.animate().alpha(0.4f).setDuration(500).start()
+    }
+
     private fun handleSingleClick() {
+        resetFadeAndTimer()
         if (!isCameraReady) {
             startCamera()
             return
@@ -469,6 +492,14 @@ class CameraService : LifecycleService() {
         }
     }
 
+    private fun resetFadeAndTimer() {
+        // Reset to full visibility
+        floatingView.animate().alpha(1.0f).setDuration(200).start()
+        // Reset fade timer
+        handler.removeCallbacks(fadeRunnable)
+        handler.postDelayed(fadeRunnable, 2500)
+    }
+
     private fun updateButtonUI() {
         if (!::floatingView.isInitialized) return
 
@@ -481,6 +512,7 @@ class CameraService : LifecycleService() {
     }
 
     private fun showFloatingMenu(anchor: View) {
+       resetFadeAndTimer()
         val contextWrapper = ContextThemeWrapper(this, R.style.Theme_MyCamApp)
         val popup = PopupMenu(contextWrapper, anchor)
 
