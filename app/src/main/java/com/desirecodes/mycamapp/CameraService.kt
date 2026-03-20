@@ -199,7 +199,7 @@ class CameraService : LifecycleService() {
         val stopAllPendingIntent = PendingIntent.getService(this, 1, stopAllIntent, PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Camera Running")
+            .setContentTitle("Running")
             .setContentText("Double tap button for menu")
             .setSmallIcon(R.drawable.baseline_camera_alt_24)
             .addAction(R.drawable.baseline_camera_alt_24, "Stop Camera", stopCameraPendingIntent)
@@ -277,7 +277,7 @@ class CameraService : LifecycleService() {
             ContextCompat.getMainExecutor(this),
             object : OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    showToast("Photo saved to hidden folder")
+                    showToast("Photo saved")
                 }
 
                 override fun onError(exception: ImageCaptureException) {
