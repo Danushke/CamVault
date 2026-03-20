@@ -15,7 +15,9 @@ import android.os.Build
 import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
+import android.provider.MediaStore
 import android.util.Log
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -198,7 +200,7 @@ class CameraService : LifecycleService() {
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Camera Running")
-            .setContentText("Long press button for menu")
+            .setContentText("Double tap button for menu")
             .setSmallIcon(R.drawable.baseline_camera_alt_24)
             .addAction(R.drawable.baseline_camera_alt_24, "Stop Camera", stopCameraPendingIntent)
             .addAction(R.drawable.baseline_camera_alt_24, "Stop All", stopAllPendingIntent)
@@ -359,6 +361,19 @@ class CameraService : LifecycleService() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         val contextWrapper = ContextThemeWrapper(this, R.style.Theme_MyCamApp)
+        
+        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                handleSingleClick()
+                return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                showFloatingMenu(floatingView)
+                return true
+            }
+        })
+
         val button = object : androidx.appcompat.widget.AppCompatButton(contextWrapper) {
             override fun performClick(): Boolean {
                 super.performClick()
@@ -371,15 +386,6 @@ class CameraService : LifecycleService() {
             }
             background = shape
             setTextColor(Color.WHITE)
-
-            setOnClickListener {
-                handleSingleClick()
-            }
-
-            setOnLongClickListener {
-                showFloatingMenu(this)
-                true
-            }
         }
 
         floatingView = button
@@ -409,6 +415,10 @@ class CameraService : LifecycleService() {
             private var isMoving = false
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
+                if (gestureDetector.onTouchEvent(event)) {
+                    return true
+                }
+
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         initialX = params.x
