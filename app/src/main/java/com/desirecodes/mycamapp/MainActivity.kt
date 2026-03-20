@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.Settings
 import android.widget.Button
 import androidx.activity.enableEdgeToEdge
@@ -31,9 +32,9 @@ class MainActivity : AppCompatActivity() {
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (allGranted) {
-            showToast("Permissions granted")
+            checkAllFilesAccess()
         } else {
-            showToast("Some permissions denied. Location or Camera features may not work.")
+            showToast("Permissions denied. Camera/Location features may not work.")
         }
     }
 
@@ -60,10 +61,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnStart).setOnClickListener {
-            if (hasRequiredCameraLocationPermissions()) {
+            if (hasRequiredCameraLocationPermissions() && hasAllFilesAccess()) {
                 startCameraService(CameraService.ACTION_START_VIDEO)
             } else {
-                requestPermissionsLauncher.launch(requiredPermissions)
+                checkAndRequestPermissions()
             }
         }
 
@@ -72,10 +73,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnPhoto).setOnClickListener {
-            if (hasRequiredCameraLocationPermissions()) {
+            if (hasRequiredCameraLocationPermissions() && hasAllFilesAccess()) {
                 startCameraService(CameraService.ACTION_TAKE_PHOTO)
             } else {
-                requestPermissionsLauncher.launch(requiredPermissions)
+                checkAndRequestPermissions()
             }
         }
 
@@ -87,6 +88,8 @@ class MainActivity : AppCompatActivity() {
     private fun checkAndRequestPermissions() {
         if (!hasRequiredCameraLocationPermissions()) {
             requestPermissionsLauncher.launch(requiredPermissions)
+        } else {
+            checkAllFilesAccess()
         }
 
         if (!hasOverlayPermission()) {
@@ -95,6 +98,26 @@ class MainActivity : AppCompatActivity() {
                 Uri.parse("package:$packageName")
             )
             startActivity(intent)
+        }
+    }
+
+    private fun checkAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                showToast("Please allow 'All Files Access' for custom hidden folder")
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            }
+        }
+    }
+
+    private fun hasAllFilesAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            true
         }
     }
 
