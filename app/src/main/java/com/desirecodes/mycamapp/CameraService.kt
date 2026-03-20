@@ -202,7 +202,7 @@ class CameraService : LifecycleService() {
             .setContentTitle("Running")
             .setContentText("Double tap button for menu")
             .setSmallIcon(R.drawable.baseline_camera_alt_24)
-            .addAction(R.drawable.baseline_camera_alt_24, "Stop Camera", stopCameraPendingIntent)
+            .addAction(R.drawable.baseline_camera_alt_24, "Stop", stopCameraPendingIntent)
             .addAction(R.drawable.baseline_camera_alt_24, "Stop All", stopAllPendingIntent)
             .setOngoing(true)
             .build()
