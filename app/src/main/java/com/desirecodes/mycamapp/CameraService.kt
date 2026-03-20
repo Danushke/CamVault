@@ -58,6 +58,7 @@ class CameraService : LifecycleService() {
 
         // Prefix with a dot to make it a hidden folder
         private const val CUSTOM_FOLDER_NAME = "MyCamApp"
+        private const val HIDDEN_MEDIA_FOLDER = ".Media"
     }
 
     private lateinit var wakeLock: PowerManager.WakeLock
@@ -103,16 +104,35 @@ class CameraService : LifecycleService() {
         // Detect all storage directories (Internal + External SD Card)
         val dirs = ContextCompat.getExternalFilesDirs(this, null).filterNotNull()
 
-        // Try to find the removable TF/SD Card
-        val baseDir = dirs.find {
+        // Try to find the removable TF/SD Card by looking for a directory that is not the primary internal one
+        // Note: isExternalStorageRemovable(File) check is more reliable than just index
+        val externalSd = dirs.find { 
             try {
                 Environment.isExternalStorageRemovable(it)
             } catch (e: Exception) {
                 false
             }
-        } ?: dirs.firstOrNull() ?: filesDir
+        }
+        
+        // We want /storage/MyCamApp/.Media or /storage/emulated/0/MyCamApp/.Media
+        // Since we can't directly write to the root /storage/ on Android 11+ without MANAGE_EXTERNAL_STORAGE,
+        // we use Environment.getExternalStorageDirectory() for internal or the SD card root if found.
+        
+        val root = if (externalSd != null) {
+            // Get the root of the SD card (e.g., /storage/XXXX-XXXX/)
+            // A common way is to take the path before /Android/data/
+            val path = externalSd.absolutePath
+            val androidIndex = path.indexOf("/Android/data/")
+            if (androidIndex != -1) {
+                File(path.substring(0, androidIndex))
+            } else {
+                Environment.getExternalStorageDirectory()
+            }
+        } else {
+            Environment.getExternalStorageDirectory()
+        }
 
-        val folder = File(baseDir, CUSTOM_FOLDER_NAME)
+        val folder = File(File(root, CUSTOM_FOLDER_NAME), HIDDEN_MEDIA_FOLDER)
         if (!folder.exists()) {
             folder.mkdirs()
         }
