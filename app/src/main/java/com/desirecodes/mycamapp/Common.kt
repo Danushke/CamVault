@@ -26,10 +26,10 @@ fun Context.hasOverlayPermission(): Boolean {
 
 fun Context.hasRequiredCameraLocationPermissions(): Boolean {
     val permissions = mutableListOf(
-        android.Manifest.permission.CAMERA,
-        android.Manifest.permission.ACCESS_FINE_LOCATION,
-        android.Manifest.permission.ACCESS_COARSE_LOCATION,
-        android.Manifest.permission.RECORD_AUDIO
+        Manifest.permission.CAMERA,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.RECORD_AUDIO
     )
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
