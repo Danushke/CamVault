@@ -5,7 +5,7 @@ import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.ContentValues
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -15,7 +15,6 @@ import android.os.Build
 import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
-import android.provider.MediaStore
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
@@ -55,6 +54,8 @@ class CameraService : LifecycleService() {
         const val ACTION_STOP_VIDEO = "STOP_VIDEO"
         const val ACTION_STOP_ALL = "ACTION_STOP_ALL"
         const val ACTION_TAKE_PHOTO = "TAKE_PHOTO"
+        const val ACTION_STOP_CAMERA = "STOP_CAMERA"
+        const val ACTION_START_CAMERA = "START_CAMERA"
 
         // Prefix with a dot to make it a hidden folder
         private const val CUSTOM_FOLDER_NAME = "MyCamApp"
@@ -106,7 +107,7 @@ class CameraService : LifecycleService() {
 
         // Try to find the removable TF/SD Card by looking for a directory that is not the primary internal one
         // Note: isExternalStorageRemovable(File) check is more reliable than just index
-        val externalSd = dirs.find { 
+        val externalSd = dirs.find {
             try {
                 Environment.isExternalStorageRemovable(it)
             } catch (e: Exception) {
@@ -165,6 +166,8 @@ class CameraService : LifecycleService() {
             ACTION_STOP_VIDEO -> stopVideoRecording()
             ACTION_TAKE_PHOTO -> takePhoto()
             ACTION_STOP_ALL -> stopAll()
+            ACTION_STOP_CAMERA -> stopCamera()
+            ACTION_START_CAMERA -> startCamera()
         }
 
         return START_STICKY
@@ -187,10 +190,19 @@ class CameraService : LifecycleService() {
             manager.createNotificationChannel(channel)
         }
 
+        val stopCameraIntent = Intent(this, CameraService::class.java).apply { action = ACTION_STOP_CAMERA }
+        val stopCameraPendingIntent = PendingIntent.getService(this, 0, stopCameraIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val stopAllIntent = Intent(this, CameraService::class.java).apply { action = ACTION_STOP_ALL }
+        val stopAllPendingIntent = PendingIntent.getService(this, 1, stopAllIntent, PendingIntent.FLAG_IMMUTABLE)
+
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Camera Running")
             .setContentText("Long press button for menu")
             .setSmallIcon(R.drawable.baseline_camera_alt_24)
+            .addAction(R.drawable.baseline_camera_alt_24, "Stop Camera", stopCameraPendingIntent)
+            .addAction(R.drawable.baseline_camera_alt_24, "Stop All", stopAllPendingIntent)
+            .setOngoing(true)
             .build()
     }
 
@@ -275,6 +287,7 @@ class CameraService : LifecycleService() {
     }
 
     private fun startCamera() {
+        if (isCameraReady) return
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             try {
@@ -294,10 +307,23 @@ class CameraService : LifecycleService() {
                 )
                 isCameraReady = true
                 Log.d("CameraService", "Camera ready")
+                updateButtonUI()
             } catch (e: Exception) {
                 Log.e("CameraService", "Camera initialization failed", e)
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun stopCamera() {
+        if (recording != null) {
+            stopVideoRecording()
+        }
+        if (::cameraProvider.isInitialized) {
+            cameraProvider.unbindAll()
+        }
+        isCameraReady = false
+        Log.d("CameraService", "Camera stopped")
+        updateButtonUI()
     }
 
     private fun switchCamera() {
@@ -418,6 +444,10 @@ class CameraService : LifecycleService() {
     }
 
     private fun handleSingleClick() {
+        if (!isCameraReady) {
+            startCamera()
+            return
+        }
         if (currentMode == CameraMode.PHOTO) {
             takePhoto()
         } else {
@@ -433,6 +463,7 @@ class CameraService : LifecycleService() {
         if (!::floatingView.isInitialized) return
 
         floatingView.text = when {
+            !isCameraReady -> "START"
             recording != null -> "STOP"
             currentMode == CameraMode.PHOTO -> "PHOTO"
             else -> "REC"
@@ -444,18 +475,30 @@ class CameraService : LifecycleService() {
         val popup = PopupMenu(contextWrapper, anchor)
 
         popup.menu.apply {
-            val modeText = if (currentMode == CameraMode.PHOTO) "Switch to VIDEO" else "Switch to PHOTO"
-            add(modeText).setOnMenuItemClickListener {
-                currentMode = if (currentMode == CameraMode.PHOTO) CameraMode.VIDEO else CameraMode.PHOTO
-                updateButtonUI()
-                showToast("Mode changed to $currentMode")
-                true
-            }
+            if (isCameraReady) {
+                val modeText = if (currentMode == CameraMode.PHOTO) "Switch to VIDEO" else "Switch to PHOTO"
+                add(modeText).setOnMenuItemClickListener {
+                    currentMode = if (currentMode == CameraMode.PHOTO) CameraMode.VIDEO else CameraMode.PHOTO
+                    updateButtonUI()
+                    showToast("Mode changed to $currentMode")
+                    true
+                }
 
-            val currentCam = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "B" else "F"
-            add("🔄 Switch Camera ($currentCam)").setOnMenuItemClickListener {
-                switchCamera()
-                true
+                val currentCam = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "B" else "F"
+                add("🔄 Switch Camera ($currentCam)").setOnMenuItemClickListener {
+                    switchCamera()
+                    true
+                }
+
+                add("⏹ Stop Camera").setOnMenuItemClickListener {
+                    stopCamera()
+                    true
+                }
+            } else {
+                add("▶ Start Camera").setOnMenuItemClickListener {
+                    startCamera()
+                    true
+                }
             }
 
             add("❌ Stop Service").setOnMenuItemClickListener {
@@ -468,7 +511,7 @@ class CameraService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (wakeLock.isHeld) wakeLock.release()
+        if (::wakeLock.isInitialized && wakeLock.isHeld) wakeLock.release()
         if (::floatingView.isInitialized) windowManager.removeView(floatingView)
     }
 }
