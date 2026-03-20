@@ -1,0 +1,28 @@
+    private fun showFloatingMenu2(anchor: View) {
+        val contextWrapper = ContextThemeWrapper(this, R.style.Theme_MyCamApp)
+        val popup = PopupMenu(contextWrapper, anchor)
+
+        popup.menu.apply {
+            add("📸 Take Photo").setOnMenuItemClickListener {
+                takePhoto()
+                true
+            }
+
+            val videoLabel = if (recording == null) "🔴 Start Video" else "⏹ Stop Video"
+            add(videoLabel).setOnMenuItemClickListener {
+                if (recording == null) startVideoRecording() else stopVideoRecording()
+                true
+            }
+
+            add("🔄 Switch Camera").setOnMenuItemClickListener {
+                switchCamera()
+                true
+            }
+
+            add("❌ Stop Service").setOnMenuItemClickListener {
+                stopAll()
+                true
+            }
+        }
+        popup.show()
+    }
