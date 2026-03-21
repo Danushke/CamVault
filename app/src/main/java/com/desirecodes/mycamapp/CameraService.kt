@@ -94,7 +94,7 @@ class CameraService : LifecycleService() {
         wakeLock.acquire(10 * 60 * 1000L /*10 minutes*/)
 
         if (hasPermission(Manifest.permission.CAMERA)) {
-            startCamera()
+//            startCamera()
         } else {
             Log.e("CameraService", "Camera permission not granted")
             showToast("Camera permission not granted")
@@ -197,20 +197,28 @@ class CameraService : LifecycleService() {
             manager.createNotificationChannel(channel)
         }
 
-        val stopCameraIntent = Intent(this, CameraService::class.java).apply { action = ACTION_STOP_CAMERA }
-        val stopCameraPendingIntent = PendingIntent.getService(this, 0, stopCameraIntent, PendingIntent.FLAG_IMMUTABLE)
+        val actionIntent = Intent(this, CameraService::class.java).apply {
+            action = if (isCameraReady) ACTION_STOP_CAMERA else ACTION_START_CAMERA
+        }
+        val actionPendingIntent = PendingIntent.getService(this, 0, actionIntent, PendingIntent.FLAG_IMMUTABLE)
 
         val stopAllIntent = Intent(this, CameraService::class.java).apply { action = ACTION_STOP_ALL }
         val stopAllPendingIntent = PendingIntent.getService(this, 1, stopAllIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val actionText = if (isCameraReady) "Stop" else "Start"
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Running")
             .setContentText("Double tap button for menu")
             .setSmallIcon(R.drawable.baseline_camera_alt_24)
-            .addAction(R.drawable.baseline_camera_alt_24, "Stop", stopCameraPendingIntent)
+            .addAction(R.drawable.baseline_camera_alt_24, actionText, actionPendingIntent)
             .addAction(R.drawable.baseline_camera_alt_24, "Stop All", stopAllPendingIntent)
             .setOngoing(true)
             .build()
+    }
+
+    private fun updateNotification() {
+        startForeground(1, createNotification())
     }
 
     @SuppressLint("MissingPermission")
@@ -322,6 +330,7 @@ class CameraService : LifecycleService() {
                 isCameraReady = true
                 Log.d("CameraService", "Camera ready")
                 updateButtonUI()
+                updateNotification()
             } catch (e: Exception) {
                 Log.e("CameraService", "Camera initialization failed", e)
             }
@@ -338,6 +347,7 @@ class CameraService : LifecycleService() {
         isCameraReady = false
         Log.d("CameraService", "Camera stopped")
         updateButtonUI()
+        updateNotification()
     }
 
     private fun switchCamera() {
