@@ -532,12 +532,12 @@ class CameraService : LifecycleService() {
                     true
                 }
 
-                add("⏹ Stop Camera").setOnMenuItemClickListener {
+                add("️⏹️ Stop Camera").setOnMenuItemClickListener {
                     stopCamera()
                     true
                 }
             } else {
-                add("▶ Start Camera").setOnMenuItemClickListener {
+                add("▶️ Start Camera").setOnMenuItemClickListener {
                     startCamera()
                     true
                 }
@@ -552,8 +552,26 @@ class CameraService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        // 1. Stop the CameraX use cases first
+        stopCamera()
+
+        // 2. Release WakeLock safely
         if (::wakeLock.isInitialized && wakeLock.isHeld) wakeLock.release()
-        if (::floatingView.isInitialized) windowManager.removeView(floatingView)
+
+
+        // 3. Safely remove the Floating View (Overlay)
+        if (::floatingView.isInitialized) {
+            try {
+                windowManager.removeView(floatingView)
+            } catch (e: IllegalArgumentException) {
+                // View was already removed or never added
+                Log.e("CameraService", "Floating view could not be removed: ${e.message}")
+            }
+        }
+
+        // 4. Always call super last to ensure clean teardown
+        super.onDestroy()
+
+        // DO NOT call stopSelf() here.
     }
 }
