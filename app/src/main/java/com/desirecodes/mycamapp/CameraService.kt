@@ -60,6 +60,8 @@ class CameraService : LifecycleService() {
         const val ACTION_STOP_CAMERA = "STOP_CAMERA"
         const val ACTION_START_CAMERA = "START_CAMERA"
 
+        const val ACTION_SWITCH_CAMERA = "SWITCH_CAMERA"
+
         // Prefix with a dot to make it a hidden folder
         private const val CUSTOM_FOLDER_NAME = "MyCamApp"
         private const val HIDDEN_MEDIA_FOLDER = ".Media"
@@ -175,6 +177,7 @@ class CameraService : LifecycleService() {
             ACTION_STOP_ALL -> stopAll()
             ACTION_STOP_CAMERA -> stopCamera()
             ACTION_START_CAMERA -> startCamera()
+            ACTION_SWITCH_CAMERA -> switchCamera(!isCameraReady)
         }
 
         return START_STICKY
@@ -207,10 +210,32 @@ class CameraService : LifecycleService() {
 
         val actionText = if (isCameraReady) "Stop" else "Start"
 
+        val currentCam = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "B" else "F"
+        val switchCamAction = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "To F" else "To B"
+
+        val camActionText = getIntentAction().let {
+            when(it){
+                ACTION_START_CAMERA -> "Start C ($currentCam)"
+                ACTION_STOP_CAMERA -> "Stop C ($currentCam)"
+                ACTION_TAKE_PHOTO -> "Photo"
+                ACTION_START_VIDEO -> "Start V ($currentCam)"
+                ACTION_STOP_VIDEO -> "Stop V ($currentCam)"
+                else -> "Action"
+            }
+        }
+
+        val camActionIntent = Intent(this, CameraService::class.java).apply { action = getIntentAction() }
+        val camActionPendingIntent = PendingIntent.getService(this, 1, camActionIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val camSwitchActionIntent = Intent(this, CameraService::class.java).apply { action = ACTION_SWITCH_CAMERA }
+        val camSwitchActionPendingIntent = PendingIntent.getService(this, 1, camSwitchActionIntent, PendingIntent.FLAG_IMMUTABLE)
+
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Running")
             .setContentText("Double tap button for menu")
             .setSmallIcon(R.drawable.baseline_camera_alt_24)
+            .addAction(R.drawable.baseline_camera_alt_24, camActionText, camActionPendingIntent)
+            .addAction(R.drawable.baseline_camera_alt_24, switchCamAction, camSwitchActionPendingIntent)
             .addAction(R.drawable.baseline_camera_alt_24, actionText, actionPendingIntent)
             .addAction(R.drawable.baseline_camera_alt_24, "Stop All", stopAllPendingIntent)
             .setOngoing(true)
@@ -263,6 +288,7 @@ class CameraService : LifecycleService() {
                 Log.d("CameraService", "Recording event: $event")
             }
         updateButtonUI()
+        updateNotification()
         showToast("Recording started")
     }
 
@@ -270,6 +296,7 @@ class CameraService : LifecycleService() {
         recording?.stop()
         recording = null
         updateButtonUI()
+        updateNotification()
         showToast("Recording stopped")
     }
 
@@ -363,6 +390,7 @@ class CameraService : LifecycleService() {
         isCameraReady = false
         if (!isBeforeCamStart) startCamera()
         showToast("Switched Camera to ${if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "BACK" else "FRONT"}")
+        updateNotification()
     }
 
     private fun stopAll() {
@@ -523,6 +551,16 @@ class CameraService : LifecycleService() {
         }
     }
 
+    fun getIntentAction():String{
+        return when {
+            !isCameraReady -> ACTION_START_CAMERA
+            currentMode == CameraMode.PHOTO -> ACTION_TAKE_PHOTO
+            recording == null -> ACTION_START_VIDEO
+            recording != null -> ACTION_STOP_VIDEO
+            else -> ACTION_STOP_CAMERA
+        }
+    }
+
     private fun showFloatingMenu(anchor: View) {
        resetFadeAndTimer()
         val contextWrapper = ContextThemeWrapper(this, R.style.Theme_MyCamApp)
@@ -534,6 +572,7 @@ class CameraService : LifecycleService() {
                 add(modeText).setOnMenuItemClickListener {
                     currentMode = if (currentMode == CameraMode.PHOTO) CameraMode.VIDEO else CameraMode.PHOTO
                     updateButtonUI()
+                    updateNotification()
                     showToast("Mode changed to $currentMode")
                     true
                 }
