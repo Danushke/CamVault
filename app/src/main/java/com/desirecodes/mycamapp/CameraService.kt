@@ -350,7 +350,7 @@ class CameraService : LifecycleService() {
         updateNotification()
     }
 
-    private fun switchCamera() {
+    private fun switchCamera(isBeforeCamStart: Boolean = false) {
         if (recording != null) {
             showToast("Cannot switch camera while recording")
             return
@@ -361,7 +361,7 @@ class CameraService : LifecycleService() {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
         isCameraReady = false
-        startCamera()
+        if (!isBeforeCamStart) startCamera()
         showToast("Switched Camera to ${if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "BACK" else "FRONT"}")
     }
 
@@ -551,6 +551,12 @@ class CameraService : LifecycleService() {
             } else {
                 add("▶️ Start Camera").setOnMenuItemClickListener {
                     startCamera()
+                    true
+                }
+
+                val currentCam = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) "B" else "F"
+                add("🔄 Switch Camera ($currentCam)").setOnMenuItemClickListener {
+                    switchCamera(true)
                     true
                 }
             }
