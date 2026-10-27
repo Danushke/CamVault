@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.StatFs
+import android.os.SystemClock
 import android.util.Log
 import android.view.GestureDetector
 import android.view.Gravity
@@ -36,6 +37,7 @@ import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -73,6 +75,7 @@ class CameraService : LifecycleService() {
     private lateinit var imageCapture: ImageCapture
     private lateinit var videoCapture: VideoCapture<Recorder>
     private var recording: Recording? = null
+    private var activeRecordingOutput: FileOutputOptions? = null
 
     private lateinit var windowManager: WindowManager
     private lateinit var floatingView: Button
@@ -277,15 +280,8 @@ class CameraService : LifecycleService() {
         }
 
         val directory: File
-        val availableBytes: Long
         try {
             directory = getCustomDirectory()
-            if (!directory.isDirectory || !directory.canWrite()) {
-                Log.e("CameraService", "Recording directory is not writable: $directory")
-                showToast(getString(R.string.recording_storage_unavailable))
-                return
-            }
-            availableBytes = StatFs(directory.absolutePath).availableBytes
         } catch (e: IllegalArgumentException) {
             Log.e("CameraService", "Unable to check recording storage", e)
             showToast(getString(R.string.recording_storage_unavailable))
@@ -296,8 +292,9 @@ class CameraService : LifecycleService() {
             return
         }
 
-        if (!RecordingStoragePolicy.hasEnoughSpace(availableBytes)) {
-            showToast(getString(R.string.recording_storage_insufficient))
+        val storageError = getRecordingStorageError(directory, R.string.recording_storage_insufficient)
+        if (storageError != null) {
+            showToast(getString(storageError))
             return
         }
 
@@ -306,24 +303,83 @@ class CameraService : LifecycleService() {
         val videoFile = File(directory, fileName)
 
         val fileOutputOptions = FileOutputOptions.Builder(videoFile).build()
+        var lastStorageCheckTime = SystemClock.elapsedRealtime()
+        activeRecordingOutput = fileOutputOptions
 
         recording = videoCapture.output
             .prepareRecording(this, fileOutputOptions)
             .withAudioEnabled()
             .start(ContextCompat.getMainExecutor(this)) { event ->
                 Log.d("CameraService", "Recording event: $event")
+                if (activeRecordingOutput !== fileOutputOptions) return@start
+
+                when (event) {
+                    is VideoRecordEvent.Status -> {
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - lastStorageCheckTime >= 1000L) {
+                            lastStorageCheckTime = now
+                            val error = getRecordingStorageError(
+                                directory,
+                                R.string.recording_stopped_low_storage
+                            )
+                            if (error != null) {
+                                stopVideoRecording(getString(error))
+                            }
+                        }
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        recording = null
+                        activeRecordingOutput = null
+                        updateButtonUI()
+                        updateNotification()
+                        if (event.hasError()) {
+                            Log.e("CameraService", "Recording failed: ${event.error}", event.cause)
+                            val message = if (
+                                event.error == VideoRecordEvent.Finalize.ERROR_INSUFFICIENT_STORAGE
+                            ) {
+                                R.string.recording_stopped_low_storage
+                            } else {
+                                R.string.recording_failed
+                            }
+                            showToast(getString(message))
+                        }
+                    }
+                }
             }
         updateButtonUI()
         updateNotification()
         showToast("Recording started")
     }
 
-    private fun stopVideoRecording() {
+    private fun getRecordingStorageError(directory: File, insufficientSpaceMessage: Int): Int? {
+        return try {
+            if (!directory.isDirectory || !directory.canWrite()) {
+                Log.e("CameraService", "Recording directory is not writable: $directory")
+                R.string.recording_storage_unavailable
+            } else if (!RecordingStoragePolicy.hasEnoughSpace(
+                    StatFs(directory.absolutePath).availableBytes
+                )
+            ) {
+                insufficientSpaceMessage
+            } else {
+                null
+            }
+        } catch (e: IllegalArgumentException) {
+            Log.e("CameraService", "Unable to check recording storage", e)
+            R.string.recording_storage_unavailable
+        } catch (e: SecurityException) {
+            Log.e("CameraService", "Recording storage access denied", e)
+            R.string.recording_storage_unavailable
+        }
+    }
+
+    private fun stopVideoRecording(message: String = "Recording stopped") {
+        activeRecordingOutput = null
         recording?.stop()
         recording = null
         updateButtonUI()
         updateNotification()
-        showToast("Recording stopped")
+        showToast(message)
     }
 
     private fun takePhoto() {
@@ -420,6 +476,7 @@ class CameraService : LifecycleService() {
     }
 
     private fun stopAll() {
+        activeRecordingOutput = null
         recording?.stop()
         recording = null
 

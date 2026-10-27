@@ -2,4 +2,6 @@
     <string name="app_name">CamVault</string>
     <string name="recording_storage_insufficient">Not enough storage. Free at least 250 MB before recording.</string>
     <string name="recording_storage_unavailable">Cannot access recording storage. Check storage permissions and availability.</string>
+    <string name="recording_stopped_low_storage">Recording stopped: less than 250 MB of storage available.</string>
+    <string name="recording_failed">Recording ended with an error. The video may be incomplete.</string>
 </resources>
