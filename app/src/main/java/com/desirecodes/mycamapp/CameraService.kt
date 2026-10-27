@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.StatFs
 import android.util.Log
 import android.view.GestureDetector
 import android.view.Gravity
@@ -275,9 +276,34 @@ class CameraService : LifecycleService() {
             return
         }
 
+        val directory: File
+        val availableBytes: Long
+        try {
+            directory = getCustomDirectory()
+            if (!directory.isDirectory || !directory.canWrite()) {
+                Log.e("CameraService", "Recording directory is not writable: $directory")
+                showToast(getString(R.string.recording_storage_unavailable))
+                return
+            }
+            availableBytes = StatFs(directory.absolutePath).availableBytes
+        } catch (e: IllegalArgumentException) {
+            Log.e("CameraService", "Unable to check recording storage", e)
+            showToast(getString(R.string.recording_storage_unavailable))
+            return
+        } catch (e: SecurityException) {
+            Log.e("CameraService", "Recording storage access denied", e)
+            showToast(getString(R.string.recording_storage_unavailable))
+            return
+        }
+
+        if (!RecordingStoragePolicy.hasEnoughSpace(availableBytes)) {
+            showToast(getString(R.string.recording_storage_insufficient))
+            return
+        }
+
         val timestamp = SimpleDateFormat(FILE_NAME_FORMAT, Locale.getDefault()).format(Date())
         val fileName = "VID_$timestamp.mp4"
-        val videoFile = File(getCustomDirectory(), fileName)
+        val videoFile = File(directory, fileName)
 
         val fileOutputOptions = FileOutputOptions.Builder(videoFile).build()
 
